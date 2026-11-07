@@ -1,0 +1,9 @@
+# Archivos temporales de Python
+__pycache__/
+*.pyc
+
+# Datos del usuario (no se suben al repositorio)
+tareas.json
+
+# Configuración del editor
+.vscode/
