@@ -1,13 +1,13 @@
 """
-services.py
+services.py  (versión v0.2.0)
 -----------
-Contiene las REGLAS del negocio: qué se puede hacer con las tareas y qué
-validaciones se aplican. No imprime ni pide datos al usuario (eso es de main.py).
+Contiene las REGLAS del negocio.
+NOVEDADES: agregar() recibe una prioridad y listar() puede ordenar por ella.
 """
 
 from pathlib import Path
 
-from models import Tarea
+from models import Tarea, PRIORIDADES  # NUEVO: importamos también PRIORIDADES
 import storage
 
 
@@ -36,23 +36,44 @@ class GestorTareas:
                 return tarea
         raise LookupError(f"No existe una tarea con id {id_tarea}.")
 
-    # ---------- Operaciones públicas (HU-01 a HU-04) ----------
+    # ---------- Operaciones públicas ----------
 
-    def agregar(self, titulo: str) -> Tarea:
-        """HU-01: crea una tarea. Lanza ValueError si el título está vacío."""
+    def agregar(self, titulo: str, prioridad: str = "media") -> Tarea:
+        """Crea una tarea (HU-01 y HU-06).
+
+        Lanza ValueError si el título está vacío o la prioridad no es válida.
+        """
         titulo = titulo.strip()  # Quita espacios al inicio y al final
         if not titulo:
             raise ValueError("El título no puede estar vacío.")
-        tarea = Tarea(id=self._siguiente_id(), titulo=titulo)
+
+        # NUEVO: normalizamos (minúsculas, sin espacios) y validamos la prioridad
+        prioridad = prioridad.strip().lower()
+        if prioridad not in PRIORIDADES:
+            raise ValueError("La prioridad debe ser: " + ", ".join(PRIORIDADES) + ".")
+
+        tarea = Tarea(id=self._siguiente_id(), titulo=titulo, prioridad=prioridad)
         self._tareas.append(tarea)
         self._guardar()
         return tarea
 
-    def listar(self, solo_pendientes: bool = False) -> list[Tarea]:
-        """HU-02: devuelve las tareas (todas o solo las pendientes)."""
+    def listar(self, solo_pendientes: bool = False,
+               por_prioridad: bool = False) -> list[Tarea]:
+        """Devuelve las tareas (HU-02 y RF-07).
+
+        solo_pendientes: si es True, omite las completadas.
+        por_prioridad:   si es True, ordena de alta a baja.
+        """
         if solo_pendientes:
-            return [t for t in self._tareas if not t.completada]
-        return list(self._tareas)  # Copia, para no exponer la lista interna
+            tareas = [t for t in self._tareas if not t.completada]
+        else:
+            tareas = list(self._tareas)  # Copia, para no exponer la lista interna
+
+        if por_prioridad:
+            # La posición en PRIORIDADES define el orden: alta=0, media=1, baja=2.
+            # sort() es estable: a igual prioridad se conserva el orden de creación.
+            tareas.sort(key=lambda t: PRIORIDADES.index(t.prioridad))
+        return tareas
 
     def completar(self, id_tarea: int) -> Tarea:
         """HU-03: marca una tarea como completada."""

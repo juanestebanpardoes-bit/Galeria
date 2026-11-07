@@ -72,5 +72,36 @@ class TestGestorTareas(unittest.TestCase):
         self.assertEqual(otro.listar()[0].titulo, "Persistente")
 
 
+    # --- HU-06: prioridades (v0.2.0) ---
+    def test_prioridad_por_defecto_es_media(self):
+        tarea = self.gestor.agregar("A")
+        self.assertEqual(tarea.prioridad, "media")
+
+    def test_agregar_con_prioridad_valida(self):
+        # Debe aceptar mayúsculas y espacios: se normalizan a "alta"
+        tarea = self.gestor.agregar("A", "  ALTA ")
+        self.assertEqual(tarea.prioridad, "alta")
+
+    def test_prioridad_invalida_lanza_error(self):
+        with self.assertRaises(ValueError):
+            self.gestor.agregar("A", "urgentisima")
+
+    def test_listar_por_prioridad_ordena_de_alta_a_baja(self):
+        self.gestor.agregar("Baja", "baja")
+        self.gestor.agregar("Alta", "alta")
+        self.gestor.agregar("Media", "media")
+        titulos = [t.titulo for t in self.gestor.listar(por_prioridad=True)]
+        self.assertEqual(titulos, ["Alta", "Media", "Baja"])
+
+    def test_archivo_antiguo_sin_prioridad_se_carga(self):
+        # Simula un tareas.json creado con v0.1.0 (sin el campo 'prioridad')
+        import json
+        antiguo = [{"id": 1, "titulo": "Vieja", "completada": False,
+                    "creada_en": "2026-01-01T00:00:00"}]
+        self.ruta.write_text(json.dumps(antiguo), encoding="utf-8")
+        gestor = GestorTareas(self.ruta)
+        self.assertEqual(gestor.listar()[0].prioridad, "media")
+
+
 if __name__ == "__main__":
     unittest.main()

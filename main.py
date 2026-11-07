@@ -1,8 +1,9 @@
 """
-main.py
+main.py  (versión v0.2.0)
 -------
-Punto de entrada del programa. Muestra el menú, lee lo que escribe el usuario
-y llama al GestorTareas. No contiene reglas de negocio.
+Punto de entrada del programa. Muestra el menú y llama al GestorTareas.
+NOVEDADES: pide la prioridad al crear, la muestra en la lista y agrega
+la opción 6 (ver tareas ordenadas por prioridad).
 
 Ejecutar con:  python main.py   (o python3 main.py en Mac/Linux)
 """
@@ -16,23 +17,30 @@ MENU = """
 3. Ver tareas pendientes
 4. Completar tarea
 5. Eliminar tarea
+6. Ver tareas por prioridad
 0. Salir
 """
 
 
 def mostrar_tareas(tareas) -> None:
-    """Imprime una lista de tareas en formato legible."""
+    """Imprime una lista de tareas en formato legible (ahora con prioridad)."""
     if not tareas:
         print("No hay tareas para mostrar.")
         return
     for t in tareas:
         estado = "[x]" if t.completada else "[ ]"
-        print(f"{t.id:>3}. {estado} {t.titulo}")
+        print(f"{t.id:>3}. {estado} [{t.prioridad}] {t.titulo}")
 
 
 def pedir_id() -> int:
     """Pide un número al usuario. Lanza ValueError si no es un entero."""
     return int(input("Id de la tarea: "))
+
+
+def pedir_prioridad() -> str:
+    """NUEVO: pide la prioridad. Si el usuario solo pulsa Enter, es 'media'."""
+    texto = input("Prioridad (alta/media/baja) [Enter = media]: ").strip()
+    return texto or "media"
 
 
 def main() -> None:
@@ -46,7 +54,9 @@ def main() -> None:
         # try/except: si algo falla mostramos un mensaje claro (RNF-02)
         try:
             if opcion == "1":
-                tarea = gestor.agregar(input("Título: "))
+                titulo = input("Título: ")
+                prioridad = pedir_prioridad()  # NUEVO
+                tarea = gestor.agregar(titulo, prioridad)
                 print(f"Tarea creada con id {tarea.id}.")
             elif opcion == "2":
                 mostrar_tareas(gestor.listar())
@@ -58,6 +68,8 @@ def main() -> None:
             elif opcion == "5":
                 gestor.eliminar(pedir_id())
                 print("Tarea eliminada.")
+            elif opcion == "6":  # NUEVO
+                mostrar_tareas(gestor.listar(por_prioridad=True))
             elif opcion == "0":
                 print("¡Hasta pronto!")
                 break

@@ -28,3 +28,15 @@
 
 - Dado que el programa está abierto, cuando escribo el título "Estudiar Git", entonces la tarea aparece en la lista como pendiente.
 - Dado que escribo un título vacío, entonces el sistema muestra un error y no crea la tarea.
+
+## Versión v0.2.0: prioridades
+
+| ID | Historia | Prioridad |
+|---|---|---|
+| HU-06 | Como usuario, quiero asignar una prioridad (alta, media o baja) a cada tarea y verlas ordenadas por prioridad, para atender primero lo más importante. | Media |
+
+- RF-06: al crear una tarea el usuario puede elegir su prioridad; si no elige ninguna, es "media".
+- RF-07: el sistema puede listar las tareas ordenadas de la más a la menos prioritaria.
+- RF-08: las tareas guardadas con la versión v0.1.0 (sin prioridad) deben seguir funcionando.
+
+**Criterio de aceptación:** dado que tengo una tarea "baja" y otra "alta", cuando elijo ver las tareas por prioridad, entonces la "alta" aparece primero.

@@ -1,12 +1,16 @@
 """
-models.py
+models.py  (versión v0.2.0)
 ---------
 Define las estructuras de datos del programa.
-Aquí solo hay datos: no hay menús ni lectura de archivos.
+NOVEDAD: la tarea ahora tiene una prioridad.
 """
 
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
+
+# NUEVO: valores permitidos para la prioridad, de la más importante a la menos.
+# El orden de esta tupla se usa después para ordenar las tareas.
+PRIORIDADES = ("alta", "media", "baja")
 
 
 @dataclass
@@ -25,6 +29,9 @@ class Tarea:
     creada_en: str = field(
         default_factory=lambda: datetime.now().isoformat(timespec="seconds")
     )
+    # NUEVO: prioridad de la tarea. El valor por defecto "media" permite
+    # cargar tareas guardadas con v0.1.0, que no tenían este campo (RF-08).
+    prioridad: str = "media"
 
     def a_diccionario(self) -> dict:
         """Convierte la tarea en un diccionario (necesario para guardarla en JSON)."""
