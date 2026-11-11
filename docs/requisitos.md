@@ -40,3 +40,22 @@
 - RF-08: las tareas guardadas con la versión v0.1.0 (sin prioridad) deben seguir funcionando.
 
 **Criterio de aceptación:** dado que tengo una tarea "baja" y otra "alta", cuando elijo ver las tareas por prioridad, entonces la "alta" aparece primero.
+
+## Versión v0.3.0: interfaz gráfica
+
+| ID | Historia | Prioridad |
+|---|---|---|
+| HU-07 | Como usuario, quiero usar el gestor en ventanas con botones y una tabla, para no tener que escribir números de menú. | Alta |
+| HU-08 | Como usuario, quiero editar el título y la prioridad de una tarea, para corregirla sin borrarla. | Media |
+| HU-09 | Como usuario, quiero filtrar (todas, pendientes, completadas) y buscar por texto, para encontrar rápido una tarea. | Media |
+| HU-10 | Como usuario, quiero ver una barra de progreso, para saber cuánto he avanzado. | Baja |
+
+- RF-09: la aplicación gráfica permite agregar, completar, editar y eliminar tareas con botones.
+- RF-10: eliminar una tarea pide confirmación en una ventana emergente.
+- RF-11: los errores (título vacío, ninguna tarea seleccionada) se muestran en ventanas de aviso.
+- RF-12: las filas de la tabla se colorean según la prioridad.
+- RF-13: el buscador filtra mientras el usuario escribe, sin distinguir mayúsculas.
+- RNF-04: la interfaz usa solo `tkinter`, incluido con Python (sin instalar nada).
+- RNF-05: la versión de consola (`main.py`) sigue funcionando y comparte los datos con la gráfica.
+
+**Criterio de aceptación (HU-08):** dado que hay una tarea seleccionada, cuando hago doble clic y cambio el título, entonces la tabla muestra el título nuevo; si lo dejo vacío, se muestra un aviso y la tarea no cambia.
