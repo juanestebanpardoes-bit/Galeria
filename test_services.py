@@ -103,5 +103,52 @@ class TestGestorTareas(unittest.TestCase):
         self.assertEqual(gestor.listar()[0].prioridad, "media")
 
 
+    # --- HU-08, HU-09 y HU-10 (v0.3.0) ---
+    def test_editar_titulo_y_prioridad(self):
+        self.gestor.agregar("Vieja", "baja")
+        tarea = self.gestor.editar(1, titulo="  Nueva  ", prioridad="ALTA")
+        self.assertEqual(tarea.titulo, "Nueva")
+        self.assertEqual(tarea.prioridad, "alta")
+
+    def test_editar_solo_titulo_conserva_prioridad(self):
+        self.gestor.agregar("A", "baja")
+        self.gestor.editar(1, titulo="B")
+        self.assertEqual(self.gestor.obtener(1).prioridad, "baja")
+
+    def test_editar_titulo_vacio_lanza_error_y_no_cambia_nada(self):
+        self.gestor.agregar("Original", "alta")
+        with self.assertRaises(ValueError):
+            self.gestor.editar(1, titulo="   ", prioridad="baja")
+        tarea = self.gestor.obtener(1)
+        self.assertEqual((tarea.titulo, tarea.prioridad), ("Original", "alta"))
+
+    def test_editar_id_inexistente_lanza_error(self):
+        with self.assertRaises(LookupError):
+            self.gestor.editar(99, titulo="X")
+
+    def test_editar_persiste_en_disco(self):
+        self.gestor.agregar("A")
+        self.gestor.editar(1, titulo="Cambiada")
+        self.assertEqual(GestorTareas(self.ruta).listar()[0].titulo, "Cambiada")
+
+    def test_buscar_por_texto_ignora_mayusculas(self):
+        self.gestor.agregar("Estudiar Git")
+        self.gestor.agregar("Comprar pan")
+        titulos = [t.titulo for t in self.gestor.listar(texto="  gIt ")]
+        self.assertEqual(titulos, ["Estudiar Git"])
+
+    def test_listar_solo_completadas(self):
+        self.gestor.agregar("A")
+        self.gestor.agregar("B")
+        self.gestor.completar(2)
+        self.assertEqual([t.titulo for t in self.gestor.listar(solo_completadas=True)], ["B"])
+
+    def test_estadisticas(self):
+        self.gestor.agregar("A")
+        self.gestor.agregar("B")
+        self.gestor.completar(1)
+        self.assertEqual(self.gestor.estadisticas(), (2, 1))
+
+
 if __name__ == "__main__":
     unittest.main()
