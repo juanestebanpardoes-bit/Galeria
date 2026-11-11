@@ -1,13 +1,22 @@
 """
-services.py  (versión v0.2.0)
+services.py  (versión v0.3.0)
 -----------
-Contiene las REGLAS del negocio.
-NOVEDADES: agregar() recibe una prioridad y listar() puede ordenar por ella.
+Contiene las REGLAS del negocio: qué se puede hacer con las tareas y qué
+validaciones se aplican. No imprime ni pide datos al usuario: de eso se
+encargan las interfaces (main.py en consola y gui.py en ventanas).
+
+NOVEDADES v0.3.0:
+  - obtener()      : devuelve una tarea por su id.
+  - editar()       : cambia el título y/o la prioridad de una tarea.
+  - listar()       : ahora también filtra por texto y por tareas completadas.
+  - estadisticas() : cuenta cuántas tareas hay y cuántas están completadas.
+  - _validar_titulo() y _validar_prioridad(): validaciones compartidas, para
+    no repetir el mismo código en agregar() y editar().
 """
 
 from pathlib import Path
 
-from models import Tarea, PRIORIDADES  # NUEVO: importamos también PRIORIDADES
+from models import Tarea, PRIORIDADES
 import storage
 
 
@@ -36,6 +45,22 @@ class GestorTareas:
                 return tarea
         raise LookupError(f"No existe una tarea con id {id_tarea}.")
 
+    @staticmethod
+    def _validar_titulo(titulo: str) -> str:
+        """NUEVO: quita espacios sobrantes y exige que el título no esté vacío."""
+        titulo = titulo.strip()
+        if not titulo:
+            raise ValueError("El título no puede estar vacío.")
+        return titulo
+
+    @staticmethod
+    def _validar_prioridad(prioridad: str) -> str:
+        """NUEVO: normaliza (minúsculas, sin espacios) y exige una prioridad válida."""
+        prioridad = prioridad.strip().lower()
+        if prioridad not in PRIORIDADES:
+            raise ValueError("La prioridad debe ser: " + ", ".join(PRIORIDADES) + ".")
+        return prioridad
+
     # ---------- Operaciones públicas ----------
 
     def agregar(self, titulo: str, prioridad: str = "media") -> Tarea:
@@ -43,31 +68,40 @@ class GestorTareas:
 
         Lanza ValueError si el título está vacío o la prioridad no es válida.
         """
-        titulo = titulo.strip()  # Quita espacios al inicio y al final
-        if not titulo:
-            raise ValueError("El título no puede estar vacío.")
-
-        # NUEVO: normalizamos (minúsculas, sin espacios) y validamos la prioridad
-        prioridad = prioridad.strip().lower()
-        if prioridad not in PRIORIDADES:
-            raise ValueError("La prioridad debe ser: " + ", ".join(PRIORIDADES) + ".")
-
+        titulo = self._validar_titulo(titulo)
+        prioridad = self._validar_prioridad(prioridad)
         tarea = Tarea(id=self._siguiente_id(), titulo=titulo, prioridad=prioridad)
         self._tareas.append(tarea)
         self._guardar()
         return tarea
 
-    def listar(self, solo_pendientes: bool = False,
-               por_prioridad: bool = False) -> list[Tarea]:
-        """Devuelve las tareas (HU-02 y RF-07).
+    def obtener(self, id_tarea: int) -> Tarea:
+        """NUEVO: devuelve la tarea con ese id. Lanza LookupError si no existe."""
+        return self._buscar(id_tarea)
 
-        solo_pendientes: si es True, omite las completadas.
-        por_prioridad:   si es True, ordena de alta a baja.
+    def listar(self, solo_pendientes: bool = False, por_prioridad: bool = False,
+               texto: str = "", solo_completadas: bool = False) -> list[Tarea]:
+        """Devuelve las tareas aplicando los filtros pedidos (HU-02, HU-06, HU-09).
+
+        solo_pendientes:  si es True, omite las completadas.
+        solo_completadas: si es True, omite las pendientes.
+        texto:            si no está vacío, deja solo las tareas cuyo título
+                          contiene ese texto (sin distinguir mayúsculas).
+        por_prioridad:    si es True, ordena de alta a baja.
         """
+        if solo_pendientes and solo_completadas:
+            raise ValueError("No se puede pedir solo pendientes y solo completadas a la vez.")
+
+        tareas = list(self._tareas)  # Copia, para no exponer la lista interna
+
         if solo_pendientes:
-            tareas = [t for t in self._tareas if not t.completada]
-        else:
-            tareas = list(self._tareas)  # Copia, para no exponer la lista interna
+            tareas = [t for t in tareas if not t.completada]
+        if solo_completadas:
+            tareas = [t for t in tareas if t.completada]
+
+        texto = texto.strip().lower()
+        if texto:
+            tareas = [t for t in tareas if texto in t.titulo.lower()]
 
         if por_prioridad:
             # La posición en PRIORIDADES define el orden: alta=0, media=1, baja=2.
@@ -82,8 +116,29 @@ class GestorTareas:
         self._guardar()
         return tarea
 
+    def editar(self, id_tarea: int, titulo: str | None = None,
+               prioridad: str | None = None) -> Tarea:
+        """NUEVO (HU-08): cambia el título y/o la prioridad de una tarea.
+
+        Los datos que no se envían (None) se dejan como estaban. Se valida
+        TODO antes de modificar la tarea: si algo es inválido, no cambia nada.
+        """
+        tarea = self._buscar(id_tarea)
+        nuevo_titulo = tarea.titulo if titulo is None else self._validar_titulo(titulo)
+        nueva_prioridad = (tarea.prioridad if prioridad is None
+                           else self._validar_prioridad(prioridad))
+        tarea.titulo = nuevo_titulo
+        tarea.prioridad = nueva_prioridad
+        self._guardar()
+        return tarea
+
     def eliminar(self, id_tarea: int) -> None:
         """HU-04: elimina una tarea por su id."""
         tarea = self._buscar(id_tarea)
         self._tareas.remove(tarea)
         self._guardar()
+
+    def estadisticas(self) -> tuple[int, int]:
+        """NUEVO (HU-10): devuelve (total de tareas, tareas completadas)."""
+        completadas = sum(1 for t in self._tareas if t.completada)
+        return len(self._tareas), completadas
