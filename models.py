@@ -32,6 +32,7 @@ class Tarea:
     # NUEVO: prioridad de la tarea. El valor por defecto "media" permite
     # cargar tareas guardadas con v0.1.0, que no tenían este campo (RF-08).
     prioridad: str = "media"
+    recordatorio_en: str | None = None
 
     def a_diccionario(self) -> dict:
         """Convierte la tarea en un diccionario (necesario para guardarla en JSON)."""

@@ -14,6 +14,8 @@ NOVEDADES v0.3.0:
     no repetir el mismo código en agregar() y editar().
 """
 
+from calendar import monthrange
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from models import Tarea, PRIORIDADES
@@ -113,8 +115,53 @@ class GestorTareas:
         """HU-03: marca una tarea como completada."""
         tarea = self._buscar(id_tarea)
         tarea.completada = True
+        tarea.recordatorio_en = None
         self._guardar()
         return tarea
+
+    def configurar_recordatorio(self, id_tarea: int,
+                               fecha_hora: str | None) -> Tarea:
+        """Configura o elimina el recordatorio de una tarea pendiente."""
+        tarea = self._buscar(id_tarea)
+        if tarea.completada:
+            raise ValueError("No se puede configurar un recordatorio para una tarea completada.")
+
+        if fecha_hora is None or not fecha_hora.strip():
+            tarea.recordatorio_en = None
+        else:
+            try:
+                momento = datetime.strptime(fecha_hora.strip(), "%Y-%m-%d %H:%M")
+            except ValueError as error:
+                raise ValueError("Usa el formato AAAA-MM-DD HH:MM.") from error
+            if momento <= datetime.now():
+                raise ValueError("El recordatorio debe ser para una fecha y hora futuras.")
+            tarea.recordatorio_en = momento.isoformat(timespec="minutes")
+
+        self._guardar()
+        return tarea
+
+    @staticmethod
+    def _sumar_mes(momento: datetime) -> datetime:
+        """Avanza un mes calendario y ajusta al último día si hace falta."""
+        mes = momento.month % 12 + 1
+        anio = momento.year + (momento.month == 12)
+        dia = min(momento.day, monthrange(anio, mes)[1])
+        return momento.replace(year=anio, month=mes, day=dia)
+
+    def configurar_recordatorio_relativo(self, id_tarea: int, periodo: str) -> Tarea:
+        """Programa un recordatorio para el día, semana o mes siguiente."""
+        ahora = datetime.now()
+        if periodo == "dia":
+            momento = ahora + timedelta(days=1)
+        elif periodo == "semana":
+            momento = ahora + timedelta(weeks=1)
+        elif periodo == "mes":
+            momento = self._sumar_mes(ahora)
+        else:
+            raise ValueError("Elige día, semana o mes siguiente.")
+
+        return self.configurar_recordatorio(
+            id_tarea, momento.strftime("%Y-%m-%d %H:%M"))
 
     def editar(self, id_tarea: int, titulo: str | None = None,
                prioridad: str | None = None) -> Tarea:

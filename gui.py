@@ -23,6 +23,8 @@ Conceptos de tkinter que se usan aquí:
   - mainloop():              bucle que mantiene la ventana abierta esperando eventos.
 """
 
+from datetime import datetime
+
 import tkinter as tk
 from tkinter import ttk, messagebox  # ttk = widgets con aspecto moderno
 
@@ -34,13 +36,14 @@ from services import GestorTareas
 # Se definen en un solo lugar: para cambiar el aspecto del programa basta con
 # modificar estos valores. Los colores se escriben en formato hexadecimal #RRGGBB.
 # =============================================================================
-COLOR_FONDO = "#F4F6FB"            # gris azulado muy claro (fondo general)
-COLOR_PRIMARIO = "#3F51B5"         # azul índigo (encabezado y botón principal)
-COLOR_PRIMARIO_OSCURO = "#303F9F"  # azul más oscuro (cuando el mouse pasa por encima)
-COLOR_TEXTO = "#212121"            # casi negro
+COLOR_FONDO = "#FFFFFF"            # blanco (fondo general)
+COLOR_PRIMARIO = "#87CEEB"         # azul celeste (encabezado y botones)
+COLOR_PRIMARIO_OSCURO = "#6CBFE3"  # azul celeste más oscuro al pasar el mouse
+COLOR_TEXTO = "#000000"            # negro
 COLOR_EXITO = "#2E7D32"            # verde (botón Completar, barra de progreso)
 COLOR_PELIGRO = "#C62828"          # rojo (botón Eliminar)
-COLOR_TEXTO_APAGADO = "#9E9E9E"    # gris (tareas ya completadas)
+COLOR_TEXTO_APAGADO = "#000000"    # negro (tareas ya completadas)
+COLOR_RECORDATORIO_VENCIDO = "#FF8A80"  # rojo suave para recordatorios vencidos
 
 # Color de fondo de cada fila de la tabla según la prioridad de la tarea
 COLORES_PRIORIDAD = {
@@ -49,7 +52,7 @@ COLORES_PRIORIDAD = {
     "baja": "#C8E6C9",   # verde suave
 }
 
-FUENTE = ("Segoe UI", 10)  # si el sistema no tiene esta fuente, tkinter usa otra
+FUENTE = ("Comic Sans MS", 10)
 
 
 # =============================================================================
@@ -126,6 +129,70 @@ class VentanaEditar(tk.Toplevel):
         self.destroy()  # todo salió bien: se cierra la ventana
 
 
+class VentanaRecordatorio(tk.Toplevel):
+    """Ventana para programar o quitar el recordatorio de una tarea."""
+
+    def __init__(self, padre, tarea, al_guardar):
+        super().__init__(padre)
+        self._al_guardar = al_guardar
+
+        self.title(f"Recordatorio para la tarea #{tarea.id}")
+        self.configure(bg=COLOR_FONDO, padx=20, pady=16)
+        self.resizable(False, False)
+        self.transient(padre)
+        self.wait_visibility()
+        self.grab_set()
+
+        if tarea.recordatorio_en:
+            ttk.Label(
+                self, text=f"Recordatorio actual: {tarea.recordatorio_en.replace('T', ' ')}"
+            ).pack(anchor="w", pady=(0, 10))
+        ttk.Label(self, text="¿Cuándo quieres que te lo recuerde?").pack(
+            anchor="w", pady=(0, 6))
+        for texto, periodo in (
+            ("Al día siguiente", "dia"),
+            ("A la semana siguiente", "semana"),
+            ("Al mes siguiente", "mes"),
+        ):
+            ttk.Button(
+                self, text=texto, style="Accion.TButton",
+                command=lambda p=periodo: self._programar(p)
+            ).pack(fill="x", pady=3)
+
+        botones = ttk.Frame(self)
+        botones.pack(anchor="e", pady=(10, 0))
+        if tarea.recordatorio_en:
+            ttk.Button(botones, text="Quitar", command=self._quitar).pack(
+                side="left", padx=(0, 6))
+        ttk.Button(botones, text="Cancelar", command=self.destroy).pack(
+            side="left")
+
+        self.bind("<Escape>", lambda _evento: self.destroy())
+        self._centrar_sobre(padre)
+
+    def _programar(self, periodo):
+        try:
+            self._al_guardar(periodo)
+        except (ValueError, LookupError) as error:
+            messagebox.showwarning("No se pudo guardar", str(error), parent=self)
+            return
+        self.destroy()
+
+    def _centrar_sobre(self, padre):
+        self.update_idletasks()
+        x = padre.winfo_rootx() + (padre.winfo_width() - self.winfo_width()) // 2
+        y = padre.winfo_rooty() + (padre.winfo_height() - self.winfo_height()) // 2
+        self.geometry(f"+{x}+{y}")
+
+    def _quitar(self):
+        try:
+            self._al_guardar(None)
+        except (ValueError, LookupError) as error:
+            messagebox.showwarning("No se pudo quitar", str(error), parent=self)
+            return
+        self.destroy()
+
+
 # =============================================================================
 # 3. VENTANA PRINCIPAL
 # =============================================================================
@@ -139,6 +206,8 @@ class AplicacionTareas:
         """
         self.raiz = raiz
         self.gestor = gestor
+        self._recordatorios_notificados: set[tuple[int, str]] = set()
+        self.raiz.option_add("*Font", FUENTE)
 
         # Variables de control: guardan lo que el usuario escribe o elige
         self.var_titulo = tk.StringVar()                 # texto de la nueva tarea
@@ -159,13 +228,14 @@ class AplicacionTareas:
         self._crear_cuerpo()
 
         self.refrescar()  # llena la tabla con las tareas guardadas
+        self.raiz.after(1000, self._revisar_recordatorios)
 
     # ------------------------------------------------------------------
     # 3.1 Configuración general de la ventana
     # ------------------------------------------------------------------
     def _configurar_ventana(self):
         """Título, tamaño y posición de la ventana principal."""
-        self.raiz.title("Gestor de Tareas")
+        self.raiz.title("Programa Juan Centralo")
         self.raiz.configure(bg=COLOR_FONDO)
         ancho, alto = 860, 640
         # Calcula la esquina superior izquierda para que la ventana quede centrada
@@ -181,22 +251,26 @@ class AplicacionTareas:
 
         # "." significa "todos los widgets"
         estilo.configure(".", font=FUENTE, background=COLOR_FONDO, foreground=COLOR_TEXTO)
-        estilo.configure("TButton", padding=(12, 6))
+        estilo.configure("TButton", font=FUENTE, padding=(12, 6))
 
         # Estilos propios: se usan con style="Nombre.TButton" al crear el botón
         for nombre, color, color_hover in (
             ("Accion", COLOR_PRIMARIO, COLOR_PRIMARIO_OSCURO),
-            ("Exito", COLOR_EXITO, "#1B5E20"),
-            ("Peligro", COLOR_PELIGRO, "#8E0000"),
+            ("Exito", "#81C784", "#66BB6A"),
+            ("Peligro", "#EF9A9A", "#E57373"),
+            ("Editar", "#FFEB3B", "#FDD835"),
+            ("Recordatorio", "#FFEB3B", "#FDD835"),
         ):
-            estilo.configure(f"{nombre}.TButton", background=color, foreground="white")
+            estilo.configure(f"{nombre}.TButton", background=color, foreground=COLOR_TEXTO)
             # map(): cambia el aspecto según el estado; "active" = mouse encima
-            estilo.map(f"{nombre}.TButton", background=[("active", color_hover)])
+            estilo.map(f"{nombre}.TButton", background=[("active", color_hover)],
+                       foreground=[("disabled", COLOR_TEXTO)])
 
         # Tabla: filas más altas y encabezado de color
-        estilo.configure("Treeview", rowheight=30, background="white", fieldbackground="white")
+        estilo.configure("Treeview", rowheight=30, background="#FFFFFF",
+                         fieldbackground="#FFFFFF", foreground=COLOR_TEXTO)
         estilo.configure("Treeview.Heading", font=(FUENTE[0], 10, "bold"),
-                         background=COLOR_PRIMARIO, foreground="white", padding=6)
+                         background=COLOR_PRIMARIO, foreground=COLOR_TEXTO, padding=6)
         estilo.map("Treeview.Heading", background=[("active", COLOR_PRIMARIO_OSCURO)])
 
         # Barra de progreso verde
@@ -206,21 +280,27 @@ class AplicacionTareas:
         # Recuadros con título y barra de estado
         estilo.configure("TLabelframe", background=COLOR_FONDO)
         estilo.configure("TLabelframe.Label", background=COLOR_FONDO,
-                         foreground=COLOR_PRIMARIO, font=(FUENTE[0], 10, "bold"))
-        estilo.configure("Estado.TLabel", background="#E0E4F2", padding=(10, 5))
+                         foreground=COLOR_TEXTO, font=(FUENTE[0], 10, "bold"))
+        estilo.configure("Estado.TLabel", background="#FFFFFF", foreground=COLOR_TEXTO,
+                         padding=(10, 5))
 
     # ------------------------------------------------------------------
     # 3.2 Menú superior (Archivo / Ayuda)
     # ------------------------------------------------------------------
     def _crear_menu(self):
         """Crea la barra de menú de la parte superior de la ventana."""
-        barra = tk.Menu(self.raiz)
+        barra = tk.Menu(self.raiz, bg=COLOR_FONDO, fg=COLOR_TEXTO,
+                        activebackground=COLOR_PRIMARIO_OSCURO, activeforeground=COLOR_TEXTO)
 
-        menu_archivo = tk.Menu(barra, tearoff=False)  # tearoff=False quita la línea punteada
+        menu_archivo = tk.Menu(
+            barra, tearoff=False, bg=COLOR_FONDO, fg=COLOR_TEXTO,
+            activebackground=COLOR_PRIMARIO_OSCURO, activeforeground=COLOR_TEXTO)
         menu_archivo.add_command(label="Salir", command=self.raiz.destroy)
         barra.add_cascade(label="Archivo", menu=menu_archivo)
 
-        menu_ayuda = tk.Menu(barra, tearoff=False)
+        menu_ayuda = tk.Menu(
+            barra, tearoff=False, bg=COLOR_FONDO, fg=COLOR_TEXTO,
+            activebackground=COLOR_PRIMARIO_OSCURO, activeforeground=COLOR_TEXTO)
         menu_ayuda.add_command(label="Acerca de...", command=self.acerca_de)
         barra.add_cascade(label="Ayuda", menu=menu_ayuda)
 
@@ -235,10 +315,10 @@ class AplicacionTareas:
         encabezado = tk.Frame(self.raiz, bg=COLOR_PRIMARIO)
         encabezado.pack(side="top", fill="x")  # fill="x": ocupa todo el ancho
 
-        tk.Label(encabezado, text="✔  Gestor de Tareas", bg=COLOR_PRIMARIO, fg="white",
+        tk.Label(encabezado, text="✔  Programa Juan", bg=COLOR_PRIMARIO, fg=COLOR_TEXTO,
                  font=(FUENTE[0], 20, "bold")).pack(anchor="w", padx=20, pady=(14, 0))
         tk.Label(encabezado, text="Organiza tu día: agrega, prioriza, edita y completa tus tareas",
-                 bg=COLOR_PRIMARIO, fg="#C5CAE9",
+                 bg=COLOR_PRIMARIO, fg=COLOR_TEXTO,
                  font=(FUENTE[0], 10)).pack(anchor="w", padx=22, pady=(0, 14))
 
     # ------------------------------------------------------------------
@@ -312,8 +392,9 @@ class AplicacionTareas:
             ("id", "#", 50, "center"),
             ("estado", "Estado", 110, "center"),
             ("prioridad", "Prioridad", 90, "center"),
-            ("titulo", "Tarea", 360, "w"),
-            ("creada", "Creada", 140, "center"),
+            ("titulo", "Tarea", 270, "w"),
+            ("creada", "Creada", 130, "center"),
+            ("recordatorio", "Recordatorio", 145, "center"),
         )
         self.tabla = ttk.Treeview(marco, columns=[c[0] for c in columnas],
                                   show="headings",       # sin la columna extra de árbol
@@ -327,6 +408,8 @@ class AplicacionTareas:
         # "Tags" (etiquetas de fila): permiten dar color según la prioridad
         for prioridad, color in COLORES_PRIORIDAD.items():
             self.tabla.tag_configure(prioridad, background=color)
+        self.tabla.tag_configure(
+            "recordatorio_vencido", background=COLOR_RECORDATORIO_VENCIDO)
         self.tabla.tag_configure("hecha", foreground=COLOR_TEXTO_APAGADO)
 
         barra = ttk.Scrollbar(marco, orient="vertical", command=self.tabla.yview)
@@ -344,8 +427,10 @@ class AplicacionTareas:
         marco.pack(fill="x")
         ttk.Button(marco, text="Completar", style="Exito.TButton",
                    command=self.completar).pack(side="left")
-        ttk.Button(marco, text="Editar",
+        ttk.Button(marco, text="Editar", style="Editar.TButton",
                    command=self.editar).pack(side="left", padx=8)
+        ttk.Button(marco, text="Recordatorio", style="Recordatorio.TButton",
+                   command=self.configurar_recordatorio).pack(side="left", padx=8)
         ttk.Button(marco, text="Eliminar", style="Peligro.TButton",
                    command=self.eliminar).pack(side="left")
 
@@ -403,6 +488,25 @@ class AplicacionTareas:
 
         VentanaEditar(self.raiz, tarea, guardar)
 
+    def configurar_recordatorio(self):
+        """Abre el formulario para programar o quitar un recordatorio."""
+        id_tarea = self._pedir_seleccion()
+        if id_tarea is None:
+            return
+        tarea = self.gestor.obtener(id_tarea)
+        if tarea.completada:
+            messagebox.showinfo(
+                "Tarea completada",
+                "No se puede configurar un recordatorio para una tarea completada.")
+            return
+
+        def guardar(periodo):
+            self.gestor.configurar_recordatorio_relativo(id_tarea, periodo)
+            self.refrescar()
+            self.var_estado.set(f"Recordatorio de la tarea {id_tarea} actualizado.")
+
+        VentanaRecordatorio(self.raiz, tarea, guardar)
+
     def eliminar(self):
         """Botón Eliminar / tecla Supr: borra la tarea seleccionada, con confirmación."""
         id_tarea = self._pedir_seleccion()
@@ -447,6 +551,28 @@ class AplicacionTareas:
         if self.tabla.identify_region(evento.x, evento.y) == "cell":
             self.editar()
 
+    def _revisar_recordatorios(self):
+        """Muestra una vez cada recordatorio vencido y continúa revisando."""
+        ahora = datetime.now()
+        vencidos = [
+            tarea for tarea in self.gestor.listar(solo_pendientes=True)
+            if tarea.recordatorio_en
+            and datetime.fromisoformat(tarea.recordatorio_en) <= ahora
+            and (tarea.id, tarea.recordatorio_en) not in self._recordatorios_notificados
+        ]
+
+        if vencidos:
+            self._recordatorios_notificados.update(
+                (tarea.id, tarea.recordatorio_en) for tarea in vencidos)
+            self.refrescar()
+            for tarea in vencidos:
+                messagebox.showinfo(
+                    "Recordatorio de tarea",
+                    f"Es hora de cumplir esta tarea:\n\n{tarea.titulo}",
+                    parent=self.raiz)
+
+        self.raiz.after(30000, self._revisar_recordatorios)
+
     def refrescar(self):
         """Vuelve a dibujar la tabla y la barra de progreso con los datos actuales.
 
@@ -469,12 +595,22 @@ class AplicacionTareas:
         )
 
         # 3) Insertar una fila por tarea. iid = identificador de la fila = id de la tarea
+        ahora = datetime.now()
         for t in tareas:
             estado = "✔ Hecha" if t.completada else "Pendiente"
-            etiqueta = "hecha" if t.completada else t.prioridad  # decide el color
+            recordatorio_vencido = (
+                t.recordatorio_en
+                and datetime.fromisoformat(t.recordatorio_en) <= ahora
+            )
+            etiqueta = (
+                "hecha" if t.completada
+                else "recordatorio_vencido" if recordatorio_vencido
+                else t.prioridad
+            )
             self.tabla.insert("", "end", iid=str(t.id), tags=(etiqueta,), values=(
                 t.id, estado, t.prioridad.capitalize(), t.titulo,
-                t.creada_en.replace("T", " ")))
+                t.creada_en.replace("T", " "),
+                t.recordatorio_en.replace("T", " ") if t.recordatorio_en else ""))
 
         # 4) Recuperar la selección anterior si esa tarea sigue visible
         if previa is not None and self.tabla.exists(str(previa)):

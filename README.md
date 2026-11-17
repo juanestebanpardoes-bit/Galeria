@@ -25,7 +25,9 @@ python -m unittest -v
 ## Funcionalidades
 - Agregar, listar, completar y eliminar tareas
 - Prioridad (alta, media, baja) y orden por prioridad
-- Interfaz gráfica: editar, filtrar, buscar y barra de progreso
+- Interfaz gráfica: editar, filtrar, buscar, barra de progreso, fuente Comic Sans y fondo azul celeste con texto negro
+- Recordatorios por tarea: desde el botón **Recordatorio** se puede elegir el día,
+  la semana o el mes siguiente; las alertas aparecen mientras la aplicación está abierta
 - Las tareas se guardan en `tareas.json`
 
 ## Autores

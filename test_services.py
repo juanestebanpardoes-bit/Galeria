@@ -7,6 +7,7 @@ Cada método que empieza por 'test_' es una prueba independiente.
 
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from services import GestorTareas
@@ -53,6 +54,11 @@ class TestGestorTareas(unittest.TestCase):
     def test_completar_tarea(self):
         self.gestor.agregar("A")
         self.assertTrue(self.gestor.completar(1).completada)
+
+    def test_completar_tarea_quita_recordatorio(self):
+        self.gestor.agregar("A")
+        self.gestor.configurar_recordatorio(1, "2099-01-01 10:00")
+        self.assertIsNone(self.gestor.completar(1).recordatorio_en)
 
     def test_completar_id_inexistente_lanza_error(self):
         with self.assertRaises(LookupError):
@@ -101,6 +107,7 @@ class TestGestorTareas(unittest.TestCase):
         self.ruta.write_text(json.dumps(antiguo), encoding="utf-8")
         gestor = GestorTareas(self.ruta)
         self.assertEqual(gestor.listar()[0].prioridad, "media")
+        self.assertIsNone(gestor.listar()[0].recordatorio_en)
 
 
     # --- HU-08, HU-09 y HU-10 (v0.3.0) ---
@@ -109,6 +116,46 @@ class TestGestorTareas(unittest.TestCase):
         tarea = self.gestor.editar(1, titulo="  Nueva  ", prioridad="ALTA")
         self.assertEqual(tarea.titulo, "Nueva")
         self.assertEqual(tarea.prioridad, "alta")
+
+    def test_configurar_recordatorio_persiste_en_disco(self):
+        self.gestor.agregar("Estudiar")
+        self.gestor.configurar_recordatorio(1, "2099-01-01 10:00")
+        otra_instancia = GestorTareas(self.ruta)
+        self.assertEqual(
+            otra_instancia.obtener(1).recordatorio_en, "2099-01-01T10:00")
+
+    def test_configurar_recordatorio_relativo_guarda_fecha_futura(self):
+        self.gestor.agregar("Estudiar")
+        tarea = self.gestor.configurar_recordatorio_relativo(1, "dia")
+        fecha = datetime.fromisoformat(tarea.recordatorio_en)
+        self.assertGreater(fecha, datetime.now())
+
+    def test_configurar_recordatorio_relativo_rechaza_periodo_invalido(self):
+        self.gestor.agregar("Estudiar")
+        with self.assertRaises(ValueError):
+            self.gestor.configurar_recordatorio_relativo(1, "año")
+
+    def test_sumar_mes_ajusta_al_ultimo_dia(self):
+        momento = datetime(2026, 1, 31, 14, 30)
+        self.assertEqual(
+            GestorTareas._sumar_mes(momento), datetime(2026, 2, 28, 14, 30))
+
+    def test_configurar_recordatorio_invalido_no_modifica_tarea(self):
+        self.gestor.agregar("Estudiar")
+        with self.assertRaises(ValueError):
+            self.gestor.configurar_recordatorio(1, "mañana")
+        self.assertIsNone(self.gestor.obtener(1).recordatorio_en)
+
+    def test_configurar_recordatorio_pasado_lanza_error(self):
+        self.gestor.agregar("Estudiar")
+        with self.assertRaises(ValueError):
+            self.gestor.configurar_recordatorio(1, "2000-01-01 10:00")
+
+    def test_tarea_completada_no_acepta_recordatorio(self):
+        self.gestor.agregar("Estudiar")
+        self.gestor.completar(1)
+        with self.assertRaises(ValueError):
+            self.gestor.configurar_recordatorio(1, "2099-01-01 10:00")
 
     def test_editar_solo_titulo_conserva_prioridad(self):
         self.gestor.agregar("A", "baja")
